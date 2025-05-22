@@ -19,12 +19,15 @@ RUN npx prisma generate
 # Собираем приложение для production
 RUN npm run build
 
-# Копируем скрипты и делаем их исполняемыми
-COPY scripts/docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh
+# Копируем скрипт docker-entrypoint.sh
+COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+# Делаем скрипт исполняемым и конвертируем в Unix-формат (для избежания проблем с переносами строк)
+RUN chmod +x /app/docker-entrypoint.sh && \
+    if command -v dos2unix > /dev/null; then dos2unix /app/docker-entrypoint.sh; \
+    else sed -i 's/\r$//' /app/docker-entrypoint.sh; fi
 
 # Выставляем порт
 EXPOSE 3000
 
 # Запускаем приложение
-CMD [ "/app/docker-entrypoint.sh" ]
+CMD [ "sh", "/app/docker-entrypoint.sh" ]

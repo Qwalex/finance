@@ -57,40 +57,60 @@ fi
 if [ "$USE_EXTERNAL_DB" == "true" ]; then
   echo "Проверяем доступность внешней базы данных..."
   
-  # Проверяем наличие утилиты nc (netcat)
-  if command -v nc >/dev/null 2>&1; then
-    # Используем netcat для проверки соединения
-    if nc -z -w 5 "$POSTGRESQL_HOST" "$POSTGRESQL_PORT"; then
-      echo "База данных доступна по адресу $POSTGRESQL_HOST:$POSTGRESQL_PORT"
+  # Функция для проверки порта на доступность
+  check_port() {
+    local host=$1
+    local port=$2
+    local is_windows=false
+    
+    # Проверяем, работаем ли мы в Windows
+    if [[ "$(uname -s)" == MINGW* ]] || [[ "$(uname -s)" == CYGWIN* ]] || [[ -n "$WINDIR" ]]; then
+      is_windows=true
+      echo "Обнаружена Windows, используем PowerShell для проверки соединения..."
+    fi
+    
+    # В Windows используем PowerShell
+    if [ "$is_windows" = true ]; then
+      if powershell -Command "Test-NetConnection -ComputerName $host -Port $port -InformationLevel Quiet" > /dev/null 2>&1; then
+        return 0 # Порт открыт
+      else
+        return 1 # Порт закрыт
+      fi
+    # На Linux/Unix используем стандартные инструменты
     else
-      echo "ВНИМАНИЕ: База данных недоступна по адресу $POSTGRESQL_HOST:$POSTGRESQL_PORT"
-      echo "Убедитесь, что внешняя база данных запущена и доступна из вашей сети."
-      read -p "Продолжить, несмотря на ошибку? (y/n) " -n 1 -r
-      echo
-      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Операция прервана пользователем."
-        exit 1
+      # Проверяем наличие netcat
+      if command -v nc >/dev/null 2>&1; then
+        if nc -z -w 5 "$host" "$port"; then
+          return 0 # Порт открыт
+        else
+          return 1 # Порт закрыт
+        fi
+      # Если netcat недоступен, пробуем telnet
+      elif command -v telnet >/dev/null 2>&1; then
+        if (echo > /dev/tcp/$host/$port) >/dev/null 2>&1; then
+          return 0 # Порт открыт
+        else
+          return 1 # Порт закрыт
+        fi
+      # Если оба недоступны, считаем порт открытым для продолжения работы
+      else
+        echo "ВНИМАНИЕ: Утилиты для проверки соединения не найдены, предполагаем что база данных доступна."
+        return 0
       fi
     fi
+  }
+  
+  # Проверяем доступность базы данных
+  if check_port "$POSTGRESQL_HOST" "$POSTGRESQL_PORT"; then
+    echo "База данных доступна по адресу $POSTGRESQL_HOST:$POSTGRESQL_PORT"
   else
-    # Если netcat недоступен, пробуем тайм-аут с помощью timeout и telnet
-    echo "Утилита netcat не найдена, используем альтернативный метод проверки..."
-    if command -v timeout >/dev/null 2>&1 && command -v telnet >/dev/null 2>&1; then
-      if timeout 5 telnet "$POSTGRESQL_HOST" "$POSTGRESQL_PORT" >/dev/null 2>&1; then
-        echo "База данных доступна по адресу $POSTGRESQL_HOST:$POSTGRESQL_PORT"
-      else
-        echo "ВНИМАНИЕ: База данных недоступна по адресу $POSTGRESQL_HOST:$POSTGRESQL_PORT"
-        echo "Убедитесь, что внешняя база данных запущена и доступна из вашей сети."
-        read -p "Продолжить, несмотря на ошибку? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-          echo "Операция прервана пользователем."
-          exit 1
-        fi
-      fi
-    else
-      echo "ВНИМАНИЕ: Не могу проверить доступность базы данных. Утилиты netcat и telnet отсутствуют."
-      echo "Продолжаем, предполагая, что база данных доступна."
+    echo "ВНИМАНИЕ: База данных недоступна по адресу $POSTGRESQL_HOST:$POSTGRESQL_PORT"
+    echo "Убедитесь, что внешняя база данных запущена и доступна из вашей сети."
+    read -p "Продолжить, несмотря на ошибку? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Операция прервана пользователем."
+      exit 1
     fi
   fi
   
@@ -109,15 +129,29 @@ if [ "$USE_EXTERNAL_DB" == "true" ]; then
   # При использовании внешней БД создадим временный docker-compose.override.yml
   echo "Создаем конфигурацию для внешней базы данных..."
   
-  # Экранируем специальные символы в пароле для строки подключения
-  # Заменяем специальные символы, которые могут вызвать проблемы
-  ESCAPED_PASSWORD=$(echo "$POSTGRESQL_PASSWORD" | sed 's/\\/\\\\/g; s/\$/\\\$/g; s/\@/\\@/g; s/\:/\\:/g')
+  # Используем значение DATABASE_URL из переменной окружения, если оно задано
+  if [ -n "$DATABASE_URL" ]; then
+    echo "Используем готовый DATABASE_URL из переменных окружения"
+    DB_URL="$DATABASE_URL"
+  else
+    # Делаем URL-кодирование пароля для правильного подключения к PostgreSQL
+    # Кодируем все специальные символы для URL
+    ENCODED_PASSWORD=$(printf "%s" "$POSTGRESQL_PASSWORD" | xxd -plain | tr -d '\n' | sed 's/\(..\)/%\1/g' | sed 's/%20/+/g' | sed 's/%2F/\//g' | sed 's/%40/@/g' | sed 's/%3A/:/g')
+    
+    # Для систем, где xxd недоступен, используем простое кодирование основных специальных символов
+    if [ -z "$ENCODED_PASSWORD" ]; then
+      echo "Используем простое кодирование специальных символов..."
+      ENCODED_PASSWORD=$(echo "$POSTGRESQL_PASSWORD" | sed 's/#/%23/g; s/</%3C/g; s/>/%3E/g; s/?/%3F/g; s/&/%26/g; s/=/%3D/g; s/+/%2B/g; s/ /%20/g')
+    fi
+    
+    DB_URL="postgresql://${POSTGRESQL_USER}:${ENCODED_PASSWORD}@${POSTGRESQL_HOST}:${POSTGRESQL_PORT}/${POSTGRESQL_DBNAME}"
+  fi
   
   cat > docker-compose.override.yml <<EOL
 services:
   app:
     environment:
-      - DATABASE_URL=postgresql://${POSTGRESQL_USER}:${ESCAPED_PASSWORD}@${POSTGRESQL_HOST}:${POSTGRESQL_PORT}/${POSTGRESQL_DBNAME}
+      - DATABASE_URL=${DB_URL}
 EOL
   
   # Не запускаем контейнер PostgreSQL

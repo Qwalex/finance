@@ -55,7 +55,7 @@ npx prisma migrate deploy
 # Проверяем, нужно ли инициализировать демо-данные
 echo "Проверяем наличие данных в базе..."
 set +e  # Не прерывать выполнение при ошибке
-TRANSACTION_COUNT=$(npx prisma db execute --stdin <<EOF
+TRANSACTION_COUNT=$(npx prisma db execute --url="$DATABASE_URL" --stdin <<EOF
 SELECT COUNT(*) FROM "Transaction";
 EOF
 )
@@ -68,10 +68,11 @@ if [ $EXIT_CODE -ne 0 ]; then
   echo "Попробуем применить миграции еще раз..."
   npx prisma migrate deploy
   # Повторяем проверку
-  TRANSACTION_COUNT=$(npx prisma db execute --stdin <<EOF
+  TRANSACTION_COUNT=$(npx prisma db execute --url="$DATABASE_URL" --stdin <<EOF
 SELECT COUNT(*) FROM "Transaction";
 EOF
 )
+fi
 
 if echo "$TRANSACTION_COUNT" | grep -q "0"; then
   echo "База данных пуста, инициализируем демо-данные..."

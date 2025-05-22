@@ -1,0 +1,7 @@
+services:
+  app:
+    environment:
+      - DATABASE_URL=postgresql://gen_user:X%23%3Cf8W(4lHl%3F%3F8@83.147.244.119:5432/default_db
+  postgres:
+    profiles:
+      - do-not-start
