@@ -43,6 +43,27 @@ describe('External Transaction API', () => {
     expect(response.transaction.type).toBe('income')
   })
   
+  it('should create an expense transaction with description', async () => {
+    const response = await $fetch('/api/external/transaction', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey
+      },
+      body: {
+        value: 7500,
+        cat: 'Развлечения',
+        description: 'Поход в кино с друзьями'
+      }
+    })
+    
+    expect(response.success).toBe(true)
+    expect(response.transaction).toBeDefined()
+    expect(response.transaction.amount).toBe(7500)
+    expect(response.transaction.category).toBe('Развлечения')
+    expect(response.transaction.description).toBe('Поход в кино с друзьями')
+    expect(response.transaction.type).toBe('expense')
+  })
+  
   it('should fail without value parameter', async () => {
     const response = await $fetch('/api/external/transaction', {
       method: 'POST',

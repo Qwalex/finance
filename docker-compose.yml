@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -7,9 +5,28 @@ services:
       dockerfile: Dockerfile
     restart: always
     container_name: finance_app
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - '3000:3000'
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://finance:?dV|7y\\GY.xx@@83.147.244.119:5432/finance_db
+      - DATABASE_URL=postgresql://${POSTGRESQL_USER:-finance_user}:${POSTGRESQL_PASSWORD:-finance_password}@postgres:5432/${POSTGRESQL_DBNAME:-finance_db}
       - EXTERNAL_API_KEY=${EXTERNAL_API_KEY:-finance-app-external-api-key}
+  
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    container_name: finance_postgres
+    environment:
+      - POSTGRES_USER=${POSTGRESQL_USER:-finance_user}
+      - POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD:-finance_password}
+      - POSTGRES_DB=${POSTGRESQL_DBNAME:-finance_db}
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRESQL_USER:-finance_user} -d ${POSTGRESQL_DBNAME:-finance_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
