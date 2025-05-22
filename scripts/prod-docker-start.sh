@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Проверяем наличие директории для данных PostgreSQL
+if [ ! -d "./postgres-data" ]; then
+  echo "Создаем директорию для данных PostgreSQL..."
+  mkdir -p ./postgres-data
+fi
+
 # Остановка и удаление текущих контейнеров (если существуют)
 echo "Останавливаем существующие контейнеры..."
 docker-compose down
