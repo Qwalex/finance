@@ -9,9 +9,6 @@ services:
     container_name: finance_app
     ports:
       - '3000:3000'
-    depends_on:
-      postgres:
-        condition: service_healthy    
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://finance:?dV|7y\\GY.xx@@83.147.244.119:5432/finance_db
