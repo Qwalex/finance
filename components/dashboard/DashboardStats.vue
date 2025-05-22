@@ -99,9 +99,9 @@ onMounted(() => {
     financeStore.loadData();
     
     // Если данных нет, загрузим демонстрационные данные
-    if (financeStore.transactions.length === 0) {
-      financeStore.loadDemoData();
-    }
+    // if (financeStore.transactions.length === 0) {
+    //   financeStore.loadDemoData();
+    // }
   }
 });
 

@@ -46,8 +46,26 @@ export interface Deposit {
   status: 'active' | 'closed';
 }
 
+// Тип состояния хранилища
+interface FinanceState {
+  transactions: Transaction[];
+  recurringItems: RecurringItem[];
+  debts: Debt[];
+  deposits: Deposit[];
+  categories: {
+    income: string[];
+    expense: string[];
+  };
+  isLoading: {
+    transactions: boolean;
+    recurringItems: boolean;
+    debts: boolean;
+    deposits: boolean;
+  };
+}
+
 export const useFinanceStore = defineStore('finance', {
-  state: () => ({
+  state: (): FinanceState => ({
     transactions: [] as Transaction[],
     recurringItems: [] as RecurringItem[],
     debts: [] as Debt[],
@@ -55,43 +73,64 @@ export const useFinanceStore = defineStore('finance', {
     categories: {
       income: ['Зарплата', 'Фриланс', 'Инвестиции', 'Подарки', 'Проценты по вкладам', 'Другое'],
       expense: ['Жилье', 'Питание', 'Транспорт', 'Развлечения', 'Здоровье', 'Образование', 'Одежда', 'Путешествия', 'Другое']
+    },
+    isLoading: {
+      transactions: false,
+      recurringItems: false,
+      debts: false,
+      deposits: false
     }
-  }),  getters: {
-    totalBalance: (state) => {
-      return state.transactions.reduce((sum, transaction) => {
+  }),
+  
+  getters: {
+    totalBalance(state: FinanceState): number {
+      return state.transactions.reduce((sum: number, transaction: Transaction) => {
         return transaction.type === 'income' 
           ? sum + transaction.amount 
           : sum - transaction.amount;
       }, 0);
     },
-    monthlyIncome: (state) => {
+    
+    monthlyIncome(state: FinanceState): number {
       const currentMonth = moment().format('YYYY-MM');
       return state.transactions
-        .filter(t => t.type === 'income' && moment(t.date).format('YYYY-MM') === currentMonth)
-        .reduce((sum, t) => sum + t.amount, 0);
+        .filter((t: Transaction) => t.type === 'income' && moment(t.date).format('YYYY-MM') === currentMonth)
+        .reduce((sum: number, t: Transaction) => sum + t.amount, 0);
     },
-    monthlyExpense: (state) => {
+    
+    monthlyExpense(state: FinanceState): number {
       const currentMonth = moment().format('YYYY-MM');
       return state.transactions
-        .filter(t => t.type === 'expense' && moment(t.date).format('YYYY-MM') === currentMonth)
-        .reduce((sum, t) => sum + t.amount, 0);
+        .filter((t: Transaction) => t.type === 'expense' && moment(t.date).format('YYYY-MM') === currentMonth)
+        .reduce((sum: number, t: Transaction) => sum + t.amount, 0);
     },
-    totalDebt: (state) => {
-      return state.debts.reduce((sum, debt) => sum + debt.currentAmount, 0);
+    
+    totalDebt(state: FinanceState): number {
+      return state.debts.reduce((sum: number, debt: Debt) => sum + debt.currentAmount, 0);
     },
-    monthlyRecurringIncome: (state) => {
+      monthlyRecurringIncome(state: FinanceState): number {
       return state.recurringItems
-        .filter(item => item.type === 'income' && item.frequency === 'monthly')
-        .reduce((sum, item) => sum + item.amount, 0);
+        .filter((item: RecurringItem) => item.type === 'income' && item.frequency === 'monthly')
+        .reduce((sum: number, item: RecurringItem) => sum + item.amount, 0);
     },
-    monthlyRecurringExpense: (state) => {
+    
+    monthlyRecurringExpense(state: FinanceState): number {
       return state.recurringItems
-        .filter(item => item.type === 'expense' && item.frequency === 'monthly')
-        .reduce((sum, item) => sum + item.amount, 0);
+        .filter((item: RecurringItem) => item.type === 'expense' && item.frequency === 'monthly')
+        .reduce((sum: number, item: RecurringItem) => sum + item.amount, 0);
     },
-    monthlyNet(): number {
-      return this.monthlyRecurringIncome - this.monthlyRecurringExpense;
+      monthlyNet(state: FinanceState): number {
+      const income = state.recurringItems
+        .filter((item: RecurringItem) => item.type === 'income' && item.frequency === 'monthly')
+        .reduce((sum: number, item: RecurringItem) => sum + item.amount, 0);
+        
+      const expense = state.recurringItems
+        .filter((item: RecurringItem) => item.type === 'expense' && item.frequency === 'monthly')
+        .reduce((sum: number, item: RecurringItem) => sum + item.amount, 0);
+        
+      return income - expense;
     },
+    
     breakEvenPoint(): string | null {
       if (this.totalDebt <= 0 || this.monthlyNet <= 0) {
         return null;
@@ -100,10 +139,11 @@ export const useFinanceStore = defineStore('finance', {
       const monthsToBreakEven = Math.ceil(this.totalDebt / this.monthlyNet);
       return moment().add(monthsToBreakEven, 'months').format('MMMM YYYY');
     },
-    transactionsByMonth() {
+    
+    transactionsByMonth(state: FinanceState) {
       const grouped = {} as Record<string, { income: number, expense: number }>;
       
-      this.transactions.forEach(transaction => {
+      state.transactions.forEach((transaction: Transaction) => {
         const month = moment(transaction.date).format('YYYY-MM');
         
         if (!grouped[month]) {
@@ -126,13 +166,14 @@ export const useFinanceStore = defineStore('finance', {
         }))
         .sort((a, b) => a.month.localeCompare(b.month));
     },
-    expensesByCategory() {
+    
+    expensesByCategory(state: FinanceState) {
       const currentMonth = moment().format('YYYY-MM');
       const grouped = {} as Record<string, number>;
       
-      this.transactions
-        .filter(t => t.type === 'expense' && moment(t.date).format('YYYY-MM') === currentMonth)
-        .forEach(transaction => {
+      state.transactions
+        .filter((t: Transaction) => t.type === 'expense' && moment(t.date).format('YYYY-MM') === currentMonth)
+        .forEach((transaction: Transaction) => {
           if (!grouped[transaction.category]) {
             grouped[transaction.category] = 0;
           }
@@ -144,166 +185,441 @@ export const useFinanceStore = defineStore('finance', {
         amount
       }));
     },
-    totalDeposits(): number {
-      return this.deposits
-        .filter(deposit => deposit.status === 'active')
-        .reduce((sum, deposit) => sum + deposit.amount, 0);
+    
+    totalDeposits(state: FinanceState): number {
+      return state.deposits
+        .filter((deposit: Deposit) => deposit.status === 'active')
+        .reduce((sum: number, deposit: Deposit) => sum + deposit.amount, 0);
     },
-    totalDepositInterest(): number {
-      return this.deposits
-        .filter(deposit => deposit.status === 'active')
-        .reduce((sum, deposit) => {
+    
+    totalDepositInterest(state: FinanceState): number {
+      return state.deposits
+        .filter((deposit: Deposit) => deposit.status === 'active')
+        .reduce((sum: number, deposit: Deposit) => {
           const initialAmount = deposit.initialAmount;
           const currentAmount = deposit.amount;
           return sum + (currentAmount - initialAmount);
         }, 0);
     },
-    activeDeposits(): Deposit[] {
-      return this.deposits.filter(deposit => deposit.status === 'active');
+    
+    activeDeposits(state: FinanceState): Deposit[] {
+      return state.deposits.filter((deposit: Deposit) => deposit.status === 'active');
     },
-    upcomingMaturityDeposits(): Deposit[] {
+    
+    upcomingMaturityDeposits(state: FinanceState): Deposit[] {
       const threeMonthsFromNow = moment().add(3, 'months').format('YYYY-MM-DD');
-      return this.deposits
-        .filter(deposit => deposit.status === 'active' && deposit.endDate <= threeMonthsFromNow)
-        .sort((a, b) => a.endDate.localeCompare(b.endDate));
+      return state.deposits
+        .filter((deposit: Deposit) => deposit.status === 'active' && deposit.endDate <= threeMonthsFromNow)
+        .sort((a: Deposit, b: Deposit) => a.endDate.localeCompare(b.endDate));
     },
-    depositsByBank() {
+    
+    depositsByBank(state: FinanceState) {
       const grouped = {} as Record<string, number>;
       
-      this.deposits
-        .filter(deposit => deposit.status === 'active')
-        .forEach(deposit => {
+      state.deposits
+        .filter((deposit: Deposit) => deposit.status === 'active')
+        .forEach((deposit: Deposit) => {
           if (!grouped[deposit.bank]) {
             grouped[deposit.bank] = 0;
           }
           grouped[deposit.bank] += deposit.amount;
         });
       
-      const totalDeposits = this.totalDeposits;
+      // Вычисляем общую сумму вкладов напрямую
+      const total = state.deposits
+        .filter((deposit: Deposit) => deposit.status === 'active')
+        .reduce((sum: number, deposit: Deposit) => sum + deposit.amount, 0);
       
       return Object.entries(grouped).map(([bank, amount]) => ({
         bank,
         amount,
-        percentage: totalDeposits > 0 ? (amount / totalDeposits) * 100 : 0
+        percentage: total > 0 ? (amount / total) * 100 : 0
       }));
     },
+    
     totalAssets(): number {
       return this.totalBalance + this.totalDeposits;
     },
+    
     netWorth(): number {
       return this.totalAssets - this.totalDebt;
     }
   },
-  actions: {
-    addTransaction(transaction: Omit<Transaction, 'id'>) {
-      const id = Date.now().toString();
-      this.transactions.push({ ...transaction, id });
-      this.saveData();
-    },
-    updateTransaction(transaction: Transaction) {
-      const index = this.transactions.findIndex(t => t.id === transaction.id);
-      if (index !== -1) {
-        this.transactions[index] = transaction;
-        this.saveData();
+    actions: {
+    // === ТРАНЗАКЦИИ ===
+    async fetchTransactions() {
+      this.isLoading.transactions = true;
+      try {
+        const response = await fetch('/api/transactions');
+        const data = await response.json();
+        if (data.transactions) {
+          this.transactions = data.transactions;
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке транзакций:', error);
+      } finally {
+        this.isLoading.transactions = false;
       }
     },
-    deleteTransaction(id: string) {
-      this.transactions = this.transactions.filter(t => t.id !== id);
-      this.saveData();
-    },
-    addRecurringItem(item: Omit<RecurringItem, 'id'>) {
-      const id = Date.now().toString();
-      this.recurringItems.push({ ...item, id });
-      this.saveData();
-    },
-    updateRecurringItem(item: RecurringItem) {
-      const index = this.recurringItems.findIndex(i => i.id === item.id);
-      if (index !== -1) {
-        this.recurringItems[index] = item;
-        this.saveData();
-      }
-    },
-    deleteRecurringItem(id: string) {
-      this.recurringItems = this.recurringItems.filter(i => i.id !== id);
-      this.saveData();
-    },
-    addDebt(debt: Omit<Debt, 'id'>) {
-      const id = Date.now().toString();
-      this.debts.push({ ...debt, id });
-      this.saveData();
-    },
-    updateDebt(debt: Debt) {
-      const index = this.debts.findIndex(d => d.id === debt.id);
-      if (index !== -1) {
-        this.debts[index] = debt;
-        this.saveData();
-      }
-    },
-    deleteDebt(id: string) {
-      this.debts = this.debts.filter(d => d.id !== id);
-      this.saveData();
-    },
-    makeDebtPayment(id: string, amount: number) {
-      const index = this.debts.findIndex(d => d.id === id);
-      if (index !== -1) {
-        const debt = this.debts[index];
-        debt.currentAmount = Math.max(0, debt.currentAmount - amount);
-        
-        // Добавим транзакцию платежа по долгу
-        this.addTransaction({
-          date: moment().format('YYYY-MM-DD'),
-          amount,
-          category: 'Долги',
-          description: `Платеж по долгу: ${debt.name}`,
-          type: 'expense'
+    
+    async addTransaction(transaction: Omit<Transaction, 'id'>) {
+      try {
+        const response = await fetch('/api/transactions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(transaction),
         });
-        
-        this.saveData();
+        const data = await response.json();
+        if (data.success && data.transaction) {
+          this.transactions.push(data.transaction);
+          this.transactions.sort((a, b) => b.date.localeCompare(a.date)); // Сортировка по дате (по убыванию)
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при добавлении транзакции:', error);
+        return { success: false, error: 'Ошибка при добавлении транзакции' };
       }
     },
-    // Методы для работы с вкладами
-    addDeposit(deposit: Omit<Deposit, 'id'>) {
-      const id = Date.now().toString();
-      this.deposits.push({ ...deposit, id });
-      this.saveData();
-    },
-    updateDeposit(deposit: Deposit) {
-      const index = this.deposits.findIndex(d => d.id === deposit.id);
-      if (index !== -1) {
-        this.deposits[index] = deposit;
-        this.saveData();
-      }
-    },
-    deleteDeposit(id: string) {
-      this.deposits = this.deposits.filter(d => d.id !== id);
-      this.saveData();
-    },
-    closeDeposit(id: string, closeAmount: number) {
-      const index = this.deposits.findIndex(d => d.id === id);
-      if (index !== -1) {
-        const deposit = this.deposits[index];
-        deposit.status = 'closed';
-        
-        // Добавим транзакцию закрытия вклада
-        this.addTransaction({
-          date: moment().format('YYYY-MM-DD'),
-          amount: closeAmount,
-          category: 'Инвестиции',
-          description: `Закрытие вклада: ${deposit.name}`,
-          type: 'income'
+    
+    async updateTransaction(transaction: Transaction) {
+      try {
+        const response = await fetch(`/api/transactions/${transaction.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(transaction),
         });
-        
-        this.saveData();
+        const data = await response.json();
+        if (data.success && data.transaction) {
+          const index = this.transactions.findIndex(t => t.id === transaction.id);
+          if (index !== -1) {
+            this.transactions[index] = data.transaction;
+          }
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при обновлении транзакции:', error);
+        return { success: false, error: 'Ошибка при обновлении транзакции' };
       }
     },
-    addInterestPayment(id: string, amount: number) {
-      const index = this.deposits.findIndex(d => d.id === id);
-      if (index !== -1) {
-        const deposit = this.deposits[index];
-        deposit.amount += amount;
+    
+    async deleteTransaction(id: string) {
+      try {
+        const response = await fetch(`/api/transactions/${id}`, {
+          method: 'DELETE',
+        });
+        const data = await response.json();
+        if (data.success) {
+          this.transactions = this.transactions.filter(t => t.id !== id);
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при удалении транзакции:', error);
+        return { success: false, error: 'Ошибка при удалении транзакции' };
+      }
+    },
+    
+    // === ПОВТОРЯЮЩИЕСЯ ПЛАТЕЖИ ===
+    async fetchRecurringItems() {
+      this.isLoading.recurringItems = true;
+      try {
+        const response = await fetch('/api/recurring');
+        const data = await response.json();
+        if (data.recurringItems) {
+          this.recurringItems = data.recurringItems;
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке повторяющихся платежей:', error);
+      } finally {
+        this.isLoading.recurringItems = false;
+      }
+    },
+    
+    async addRecurringItem(item: Omit<RecurringItem, 'id'>) {
+      try {
+        const response = await fetch('/api/recurring', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(item),
+        });
+        const data = await response.json();
+        if (data.success && data.recurringItem) {
+          this.recurringItems.push(data.recurringItem);
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при добавлении повторяющегося платежа:', error);
+        return { success: false, error: 'Ошибка при добавлении повторяющегося платежа' };
+      }
+    },
+    
+    async updateRecurringItem(item: RecurringItem) {
+      try {
+        const response = await fetch(`/api/recurring/${item.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(item),
+        });
+        const data = await response.json();
+        if (data.success && data.recurringItem) {
+          const index = this.recurringItems.findIndex(i => i.id === item.id);
+          if (index !== -1) {
+            this.recurringItems[index] = data.recurringItem;
+          }
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при обновлении повторяющегося платежа:', error);
+        return { success: false, error: 'Ошибка при обновлении повторяющегося платежа' };
+      }
+    },
+    
+    async deleteRecurringItem(id: string) {
+      try {
+        const response = await fetch(`/api/recurring/${id}`, {
+          method: 'DELETE',
+        });
+        const data = await response.json();
+        if (data.success) {
+          this.recurringItems = this.recurringItems.filter(i => i.id !== id);
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при удалении повторяющегося платежа:', error);
+        return { success: false, error: 'Ошибка при удалении повторяющегося платежа' };
+      }
+    },
+    
+    // === ДОЛГИ ===
+    async fetchDebts() {
+      this.isLoading.debts = true;
+      try {
+        const response = await fetch('/api/debts');
+        const data = await response.json();
+        if (data.debts) {
+          this.debts = data.debts;
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке долгов:', error);
+      } finally {
+        this.isLoading.debts = false;
+      }
+    },
+    
+    async addDebt(debt: Omit<Debt, 'id'>) {
+      try {
+        const response = await fetch('/api/debts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(debt),
+        });
+        const data = await response.json();
+        if (data.success && data.debt) {
+          this.debts.push(data.debt);
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при добавлении долга:', error);
+        return { success: false, error: 'Ошибка при добавлении долга' };
+      }
+    },
+    
+    async updateDebt(debt: Debt) {
+      try {
+        const response = await fetch(`/api/debts/${debt.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(debt),
+        });
+        const data = await response.json();
+        if (data.success && data.debt) {
+          const index = this.debts.findIndex(d => d.id === debt.id);
+          if (index !== -1) {
+            this.debts[index] = data.debt;
+          }
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при обновлении долга:', error);
+        return { success: false, error: 'Ошибка при обновлении долга' };
+      }
+    },
+    
+    async deleteDebt(id: string) {
+      try {
+        const response = await fetch(`/api/debts/${id}`, {
+          method: 'DELETE',
+        });
+        const data = await response.json();
+        if (data.success) {
+          this.debts = this.debts.filter(d => d.id !== id);
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при удалении долга:', error);
+        return { success: false, error: 'Ошибка при удалении долга' };
+      }
+    },
+    
+    async makeDebtPayment(id: string, amount: number) {
+      try {
+        const response = await fetch('/api/debts/payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ debtId: id, amount }),
+        });
+        const data = await response.json();
+        if (data.success && data.debt) {
+          const index = this.debts.findIndex(d => d.id === id);
+          if (index !== -1) {
+            this.debts[index] = data.debt;
+          }
+          
+          // Обновим транзакции после внесения платежа
+          await this.fetchTransactions();
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при внесении платежа по долгу:', error);
+        return { success: false, error: 'Ошибка при внесении платежа по долгу' };
+      }
+    },
+    
+    // === ВКЛАДЫ ===
+    async fetchDeposits() {
+      this.isLoading.deposits = true;
+      try {
+        const response = await fetch('/api/deposits');
+        const data = await response.json();
+        if (data.deposits) {
+          this.deposits = data.deposits;
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке вкладов:', error);
+      } finally {
+        this.isLoading.deposits = false;
+      }
+    },
+    
+    async addDeposit(deposit: Omit<Deposit, 'id'>) {
+      try {
+        const response = await fetch('/api/deposits', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(deposit),
+        });
+        const data = await response.json();
+        if (data.success && data.deposit) {
+          this.deposits.push(data.deposit);
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при добавлении вклада:', error);
+        return { success: false, error: 'Ошибка при добавлении вклада' };
+      }
+    },
+    
+    async updateDeposit(deposit: Deposit) {
+      try {
+        const response = await fetch(`/api/deposits/${deposit.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(deposit),
+        });
+        const data = await response.json();
+        if (data.success && data.deposit) {
+          const index = this.deposits.findIndex(d => d.id === deposit.id);
+          if (index !== -1) {
+            this.deposits[index] = data.deposit;
+          }
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при обновлении вклада:', error);
+        return { success: false, error: 'Ошибка при обновлении вклада' };
+      }
+    },
+    
+    async deleteDeposit(id: string) {
+      try {
+        const response = await fetch(`/api/deposits/${id}`, {
+          method: 'DELETE',
+        });
+        const data = await response.json();
+        if (data.success) {
+          this.deposits = this.deposits.filter(d => d.id !== id);
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при удалении вклада:', error);
+        return { success: false, error: 'Ошибка при удалении вклада' };
+      }
+    },
+    
+    async closeDeposit(id: string, closeAmount: number) {
+      try {
+        const response = await fetch(`/api/deposits/${id}/close`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ closeAmount }),
+        });
+        const data = await response.json();
+        if (data.success && data.deposit) {
+          const index = this.deposits.findIndex(d => d.id === id);
+          if (index !== -1) {
+            this.deposits[index] = data.deposit;
+          }
+          
+          // Обновим транзакции после закрытия вклада
+          await this.fetchTransactions();
+        }
+        return data;
+      } catch (error) {
+        console.error('Ошибка при закрытии вклада:', error);
+        return { success: false, error: 'Ошибка при закрытии вклада' };
+      }
+    },
+    
+    async addInterestPayment(id: string, amount: number) {
+      try {
+        const depositIndex = this.deposits.findIndex(d => d.id === id);
+        if (depositIndex === -1) {
+          return { success: false, error: 'Вклад не найден' };
+        }
         
-        // Добавим транзакцию процентов по вкладу
-        this.addTransaction({
+        const deposit = this.deposits[depositIndex];
+        const updatedDeposit = {
+          ...deposit,
+          amount: deposit.amount + amount
+        };
+        
+        // Обновляем данные вклада
+        const updateResult = await this.updateDeposit(updatedDeposit);
+        if (!updateResult.success) {
+          return updateResult;
+        }
+        
+        // Добавляем транзакцию
+        await this.addTransaction({
           date: moment().format('YYYY-MM-DD'),
           amount,
           category: 'Проценты по вкладам',
@@ -311,33 +627,48 @@ export const useFinanceStore = defineStore('finance', {
           type: 'income'
         });
         
-        this.saveData();
+        return { success: true };
+      } catch (error) {
+        console.error('Ошибка при начислении процентов:', error);
+        return { success: false, error: 'Ошибка при начислении процентов' };
       }
     },
-    loadDemoData() {
+    
+    // === ЗАГРУЗКА ДАННЫХ ===
+    async loadData() {
+      // Загружаем все данные из API
+      await Promise.all([
+        this.fetchTransactions(),
+        this.fetchRecurringItems(),
+        this.fetchDebts(),
+        this.fetchDeposits()
+      ]);
+    },    async loadDemoData() {
       // Загрузка демонстрационных данных
       const today = moment().format('YYYY-MM-DD');
       const lastMonth = moment().subtract(1, 'month').format('YYYY-MM-DD');
       
-      this.transactions = [
-        { id: '1', date: today, amount: 100000, category: 'Зарплата', description: 'Зарплата за май', type: 'income' },
-        { id: '2', date: today, amount: 20000, category: 'Фриланс', description: 'Проект для клиента', type: 'income' },
-        { id: '3', date: today, amount: 15000, category: 'Жилье', description: 'Оплата аренды', type: 'expense' },
-        { id: '4', date: today, amount: 5000, category: 'Питание', description: 'Продукты', type: 'expense' },
-        { id: '5', date: lastMonth, amount: 100000, category: 'Зарплата', description: 'Зарплата за апрель', type: 'income' },
-        { id: '6', date: lastMonth, amount: 10000, category: 'Развлечения', description: 'Кино и ресторан', type: 'expense' },
+      // Транзакции
+      const demoTransactions: Omit<Transaction, 'id'>[] = [
+        { date: today, amount: 100000, category: 'Зарплата', description: 'Зарплата за май', type: 'income' },
+        { date: today, amount: 20000, category: 'Фриланс', description: 'Проект для клиента', type: 'income' },
+        { date: today, amount: 15000, category: 'Жилье', description: 'Оплата аренды', type: 'expense' },
+        { date: today, amount: 5000, category: 'Питание', description: 'Продукты', type: 'expense' },
+        { date: lastMonth, amount: 100000, category: 'Зарплата', description: 'Зарплата за апрель', type: 'income' },
+        { date: lastMonth, amount: 10000, category: 'Развлечения', description: 'Кино и ресторан', type: 'expense' },
       ];
       
-      this.recurringItems = [
-        { id: '1', amount: 100000, description: 'Ежемесячная зарплата', category: 'Зарплата', type: 'income', frequency: 'monthly', startDate: today },
-        { id: '2', amount: 15000, description: 'Оплата аренды', category: 'Жилье', type: 'expense', frequency: 'monthly', startDate: today },
-        { id: '3', amount: 20000, description: 'Продукты', category: 'Питание', type: 'expense', frequency: 'monthly', startDate: today },
-        { id: '4', amount: 5000, description: 'Подписки', category: 'Развлечения', type: 'expense', frequency: 'monthly', startDate: today },
+      // Повторяющиеся платежи
+      const demoRecurringItems: Omit<RecurringItem, 'id'>[] = [
+        { amount: 100000, description: 'Ежемесячная зарплата', category: 'Зарплата', type: 'income', frequency: 'monthly', startDate: today },
+        { amount: 15000, description: 'Оплата аренды', category: 'Жилье', type: 'expense', frequency: 'monthly', startDate: today },
+        { amount: 20000, description: 'Продукты', category: 'Питание', type: 'expense', frequency: 'monthly', startDate: today },
+        { amount: 5000, description: 'Подписки', category: 'Развлечения', type: 'expense', frequency: 'monthly', startDate: today },
       ];
       
-      this.debts = [
+      // Долги
+      const demoDebts: Omit<Debt, 'id'>[] = [
         { 
-          id: '1', 
           name: 'Кредит на автомобиль', 
           initialAmount: 500000, 
           currentAmount: 350000, 
@@ -347,7 +678,6 @@ export const useFinanceStore = defineStore('finance', {
           startDate: moment().subtract(6, 'months').format('YYYY-MM-DD') 
         },
         { 
-          id: '2', 
           name: 'Кредитная карта', 
           initialAmount: 100000, 
           currentAmount: 80000, 
@@ -358,10 +688,9 @@ export const useFinanceStore = defineStore('finance', {
         }
       ];
       
-      // Демо-данные для вкладов
-      this.deposits = [
+      // Вклады
+      const demoDeposits: Omit<Deposit, 'id'>[] = [
         {
-          id: '1',
           name: 'Накопительный вклад',
           amount: 200000,
           initialAmount: 200000,
@@ -374,300 +703,6 @@ export const useFinanceStore = defineStore('finance', {
           status: 'active'
         },
         {
-          id: '2',
-          name: 'Срочный вклад',
-          amount: 500000,
-          initialAmount: 500000,
-          interestRate: 8.2,
-          startDate: moment().subtract(1, 'months').format('YYYY-MM-DD'),
-          endDate: moment().add(12, 'months').format('YYYY-MM-DD'),
-          bank: 'ВТБ',
-          isCapitalized: false,
-          paymentFrequency: 'quarterly',
-          status: 'active'
-        }
-      ];
-      
-      this.saveData();
-    },
-    saveData() {
-      // Сохранение в localStorage
-      if (process.client) {
-        localStorage.setItem('finance-transactions', JSON.stringify(this.transactions));
-        localStorage.setItem('finance-recurring', JSON.stringify(this.recurringItems));
-        localStorage.setItem('finance-debts', JSON.stringify(this.debts));
-        localStorage.setItem('finance-deposits', JSON.stringify(this.deposits));
-      }
-    },
-    loadData() {
-      // Загрузка из localStorage
-      if (process.client) {
-        const transactions = localStorage.getItem('finance-transactions');
-        const recurring = localStorage.getItem('finance-recurring');
-        const debts = localStorage.getItem('finance-debts');
-        const deposits = localStorage.getItem('finance-deposits');
-        
-        if (transactions) this.transactions = JSON.parse(transactions);
-        if (recurring) this.recurringItems = JSON.parse(recurring);
-        if (debts) this.debts = JSON.parse(debts);
-        if (deposits) this.deposits = JSON.parse(deposits);
-      }
-    }
-  }
-});
-    monthlyIncome(): number {
-      const currentMonth = moment().format('YYYY-MM');
-      return this.transactions
-        .filter(t => t.type === 'income' && moment(t.date).format('YYYY-MM') === currentMonth)
-        .reduce((sum, t) => sum + t.amount, 0);
-    },
-    monthlyExpense(): number {
-      const currentMonth = moment().format('YYYY-MM');
-      return this.transactions
-        .filter(t => t.type === 'expense' && moment(t.date).format('YYYY-MM') === currentMonth)
-        .reduce((sum, t) => sum + t.amount, 0);
-    },
-    totalDebt(): number {
-      return this.debts.reduce((sum, debt) => sum + debt.currentAmount, 0);
-    },
-    monthlyRecurringIncome(): number {
-      return this.recurringItems
-        .filter(item => item.type === 'income' && item.frequency === 'monthly')
-        .reduce((sum, item) => sum + item.amount, 0);
-    },
-    monthlyRecurringExpense(): number {
-      return this.recurringItems
-        .filter(item => item.type === 'expense' && item.frequency === 'monthly')
-        .reduce((sum, item) => sum + item.amount, 0);
-    },
-    monthlyNet(): number {
-      return this.monthlyRecurringIncome - this.monthlyRecurringExpense;
-    },
-    breakEvenPoint(): string | null {
-      if (this.totalDebt <= 0 || this.monthlyNet <= 0) {
-        return null;
-      }
-      
-      const monthsToBreakEven = Math.ceil(this.totalDebt / this.monthlyNet);
-      return moment().add(monthsToBreakEven, 'months').format('MMMM YYYY');
-    },
-    transactionsByMonth() {
-      const grouped = {} as Record<string, { income: number, expense: number }>;
-      
-      this.transactions.forEach(transaction => {
-        const month = moment(transaction.date).format('YYYY-MM');
-        
-        if (!grouped[month]) {
-          grouped[month] = { income: 0, expense: 0 };
-        }
-        
-        if (transaction.type === 'income') {
-          grouped[month].income += transaction.amount;
-        } else {
-          grouped[month].expense += transaction.amount;
-        }
-      });
-      
-      return Object.entries(grouped)
-        .map(([month, data]) => ({
-          month,
-          income: data.income,
-          expense: data.expense,
-          net: data.income - data.expense
-        }))
-        .sort((a, b) => a.month.localeCompare(b.month));
-    },    expensesByCategory() {
-      const currentMonth = moment().format('YYYY-MM');
-      const grouped = {} as Record<string, number>;
-      
-      this.transactions
-        .filter(t => t.type === 'expense' && moment(t.date).format('YYYY-MM') === currentMonth)
-        .forEach(transaction => {
-          if (!grouped[transaction.category]) {
-            grouped[transaction.category] = 0;
-          }
-          grouped[transaction.category] += transaction.amount;
-        });
-      
-      return Object.entries(grouped).map(([category, amount]) => ({
-        category,
-        amount
-      }));
-    },
-    totalDeposits(): number {
-      return this.deposits
-        .filter(deposit => deposit.status === 'active')
-        .reduce((sum, deposit) => sum + deposit.amount, 0);
-    },
-    totalDepositInterest(): number {
-      return this.deposits
-        .filter(deposit => deposit.status === 'active')
-        .reduce((sum, deposit) => {
-          const initialAmount = deposit.initialAmount;
-          const currentAmount = deposit.amount;
-          return sum + (currentAmount - initialAmount);
-        }, 0);
-    },
-    activeDeposits(): Deposit[] {
-      return this.deposits.filter(deposit => deposit.status === 'active');
-    },
-    upcomingMaturityDeposits(): Deposit[] {
-      const threeMonthsFromNow = moment().add(3, 'months').format('YYYY-MM-DD');
-      return this.deposits
-        .filter(deposit => deposit.status === 'active' && deposit.endDate <= threeMonthsFromNow)
-        .sort((a, b) => a.endDate.localeCompare(b.endDate));
-    },
-    depositsByBank() {      const grouped = {} as Record<string, number>;
-      
-      this.deposits
-        .filter(deposit => deposit.status === 'active')
-        .forEach(deposit => {
-          if (!grouped[deposit.bank]) {
-            grouped[deposit.bank] = 0;
-          }
-          grouped[deposit.bank] += deposit.amount;
-        });
-      
-      return Object.entries(grouped).map(([bank, amount]) => ({
-        bank,
-        amount,
-        percentage: amount / (this.totalDeposits || 1) * 100
-      }));
-    },
-    totalAssets(): number {
-      return this.totalBalance + this.totalDeposits;
-    },
-    netWorth(): number {
-      return this.totalAssets - this.totalDebt;
-    }
-  },
-  actions: {
-    addTransaction(transaction: Omit<Transaction, 'id'>) {
-      const id = Date.now().toString();
-      this.transactions.push({ ...transaction, id });
-      this.saveData();
-    },
-    updateTransaction(transaction: Transaction) {
-      const index = this.transactions.findIndex(t => t.id === transaction.id);
-      if (index !== -1) {
-        this.transactions[index] = transaction;
-        this.saveData();
-      }
-    },
-    deleteTransaction(id: string) {
-      this.transactions = this.transactions.filter(t => t.id !== id);
-      this.saveData();
-    },
-    addRecurringItem(item: Omit<RecurringItem, 'id'>) {
-      const id = Date.now().toString();
-      this.recurringItems.push({ ...item, id });
-      this.saveData();
-    },
-    updateRecurringItem(item: RecurringItem) {
-      const index = this.recurringItems.findIndex(i => i.id === item.id);
-      if (index !== -1) {
-        this.recurringItems[index] = item;
-        this.saveData();
-      }
-    },
-    deleteRecurringItem(id: string) {
-      this.recurringItems = this.recurringItems.filter(i => i.id !== id);
-      this.saveData();
-    },
-    addDebt(debt: Omit<Debt, 'id'>) {
-      const id = Date.now().toString();
-      this.debts.push({ ...debt, id });
-      this.saveData();
-    },
-    updateDebt(debt: Debt) {
-      const index = this.debts.findIndex(d => d.id === debt.id);
-      if (index !== -1) {
-        this.debts[index] = debt;
-        this.saveData();
-      }
-    },
-    deleteDebt(id: string) {
-      this.debts = this.debts.filter(d => d.id !== id);
-      this.saveData();
-    },
-    makeDebtPayment(id: string, amount: number) {
-      const index = this.debts.findIndex(d => d.id === id);
-      if (index !== -1) {
-        const debt = this.debts[index];
-        debt.currentAmount = Math.max(0, debt.currentAmount - amount);
-        
-        // Добавим транзакцию платежа по долгу
-        this.addTransaction({
-          date: moment().format('YYYY-MM-DD'),
-          amount,
-          category: 'Долги',
-          description: `Платеж по долгу: ${debt.name}`,
-          type: 'expense'
-        });
-        
-        this.saveData();
-      }
-    },    loadDemoData() {
-      // Загрузка демонстрационных данных
-      const today = moment().format('YYYY-MM-DD');
-      const lastMonth = moment().subtract(1, 'month').format('YYYY-MM-DD');
-      
-      this.transactions = [
-        { id: '1', date: today, amount: 100000, category: 'Зарплата', description: 'Зарплата за май', type: 'income' },
-        { id: '2', date: today, amount: 20000, category: 'Фриланс', description: 'Проект для клиента', type: 'income' },
-        { id: '3', date: today, amount: 15000, category: 'Жилье', description: 'Оплата аренды', type: 'expense' },
-        { id: '4', date: today, amount: 5000, category: 'Питание', description: 'Продукты', type: 'expense' },
-        { id: '5', date: lastMonth, amount: 100000, category: 'Зарплата', description: 'Зарплата за апрель', type: 'income' },
-        { id: '6', date: lastMonth, amount: 10000, category: 'Развлечения', description: 'Кино и ресторан', type: 'expense' },
-      ];
-      
-      this.recurringItems = [
-        { id: '1', amount: 100000, description: 'Ежемесячная зарплата', category: 'Зарплата', type: 'income', frequency: 'monthly', startDate: today },
-        { id: '2', amount: 15000, description: 'Оплата аренды', category: 'Жилье', type: 'expense', frequency: 'monthly', startDate: today },
-        { id: '3', amount: 20000, description: 'Продукты', category: 'Питание', type: 'expense', frequency: 'monthly', startDate: today },
-        { id: '4', amount: 5000, description: 'Подписки', category: 'Развлечения', type: 'expense', frequency: 'monthly', startDate: today },
-      ];
-      
-      this.debts = [
-        { 
-          id: '1', 
-          name: 'Кредит на автомобиль', 
-          initialAmount: 500000, 
-          currentAmount: 350000, 
-          interestRate: 12, 
-          minimumPayment: 15000, 
-          dueDay: 15, 
-          startDate: moment().subtract(6, 'months').format('YYYY-MM-DD') 
-        },
-        { 
-          id: '2', 
-          name: 'Кредитная карта', 
-          initialAmount: 100000, 
-          currentAmount: 80000, 
-          interestRate: 18, 
-          minimumPayment: 5000, 
-          dueDay: 20, 
-          startDate: moment().subtract(3, 'months').format('YYYY-MM-DD') 
-        }
-      ];
-      
-      // Демо-данные для вкладов
-      this.deposits = [
-        {
-          id: '1',
-          name: 'Накопительный вклад',
-          amount: 200000,
-          initialAmount: 200000,
-          interestRate: 7.5,
-          startDate: moment().subtract(2, 'months').format('YYYY-MM-DD'),
-          endDate: moment().add(10, 'months').format('YYYY-MM-DD'),
-          bank: 'Сбербанк',
-          isCapitalized: true,
-          paymentFrequency: 'monthly',
-          status: 'active'
-        },
-        {
-          id: '2',
           name: 'Срочный вклад',
           amount: 500000,
           initialAmount: 500000,
@@ -680,7 +715,6 @@ export const useFinanceStore = defineStore('finance', {
           status: 'active'
         },
         {
-          id: '3',
           name: 'Накопительный счет',
           amount: 150000,
           initialAmount: 100000,
@@ -691,44 +725,24 @@ export const useFinanceStore = defineStore('finance', {
           isCapitalized: true,
           paymentFrequency: 'monthly',
           status: 'active'
-        },
-        {
-          id: '4',
-          name: 'Закрытый вклад',
-          amount: 300000,
-          initialAmount: 250000,
-          interestRate: 7.0,
-          startDate: moment().subtract(12, 'months').format('YYYY-MM-DD'),
-          endDate: moment().subtract(1, 'months').format('YYYY-MM-DD'),
-          bank: 'Альфа-Банк',
-          isCapitalized: false,
-          paymentFrequency: 'atMaturity',
-          status: 'closed'
         }
       ];
       
-      this.saveData();
-    },saveData() {
-      // Сохранение в localStorage
-      if (process.client) {
-        localStorage.setItem('finance-transactions', JSON.stringify(this.transactions));
-        localStorage.setItem('finance-recurring', JSON.stringify(this.recurringItems));
-        localStorage.setItem('finance-debts', JSON.stringify(this.debts));
-        localStorage.setItem('finance-deposits', JSON.stringify(this.deposits));
+      // Выполняем последовательное добавление данных
+      for (const transaction of demoTransactions) {
+        await this.addTransaction(transaction);
       }
-    },
-    loadData() {
-      // Загрузка из localStorage
-      if (process.client) {
-        const transactions = localStorage.getItem('finance-transactions');
-        const recurring = localStorage.getItem('finance-recurring');
-        const debts = localStorage.getItem('finance-debts');
-        const deposits = localStorage.getItem('finance-deposits');
-        
-        if (transactions) this.transactions = JSON.parse(transactions);
-        if (recurring) this.recurringItems = JSON.parse(recurring);
-        if (debts) this.debts = JSON.parse(debts);
-        if (deposits) this.deposits = JSON.parse(deposits);
+      
+      for (const recurringItem of demoRecurringItems) {
+        await this.addRecurringItem(recurringItem);
+      }
+      
+      for (const debt of demoDebts) {
+        await this.addDebt(debt);
+      }
+      
+      for (const deposit of demoDeposits) {
+        await this.addDeposit(deposit);
       }
     }
   }

@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Модель для транзакций
+model Transaction {
+  id          String   @id @default(uuid())
+  date        DateTime
+  amount      Float
+  category    String
+  description String
+  type        String   // 'income' | 'expense'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Модель для периодических платежей
+model RecurringItem {
+  id          String    @id @default(uuid())
+  amount      Float
+  description String
+  category    String
+  type        String    // 'income' | 'expense'
+  frequency   String    // 'daily' | 'weekly' | 'monthly' | 'yearly'
+  startDate   DateTime
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Модель для долгов
+model Debt {
+  id             String   @id @default(uuid())
+  name           String
+  initialAmount  Float
+  currentAmount  Float
+  interestRate   Float
+  minimumPayment Float
+  dueDay         Int
+  startDate      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Модель для вкладов
+model Deposit {
+  id               String   @id @default(uuid())
+  name             String
+  amount           Float
+  initialAmount    Float
+  interestRate     Float
+  startDate        DateTime
+  endDate          DateTime
+  bank             String
+  isCapitalized    Boolean
+  paymentFrequency String    // 'monthly' | 'quarterly' | 'yearly' | 'atMaturity'
+  status           String    // 'active' | 'closed'
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

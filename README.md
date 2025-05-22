@@ -1,3 +1,4 @@
+<!-- filepath: c:\Users\qwazi\Рабочий стол\finance\README.md -->
 # Финансовый учет - Персональное приложение для управления финансами
 
 Это приложение на основе Nuxt.js для учета личных финансов и планирования бюджета. Приложение позволяет отслеживать доходы, расходы, регулярные платежи, задолженности и вклады, а также предоставляет наглядную аналитику и прогнозы.
@@ -18,76 +19,82 @@
 - **UI Components:** PrimeVue
 - **Графики:** Chart.js, Vue-Chart.js
 - **Работа с датами:** Moment.js
-- **Хранение данных:** Local Storage (в текущей версии)
+- **База данных:** PostgreSQL
+- **ORM:** Prisma
+- **Контейнеризация:** Docker, Docker Compose
+
+## Требования
+
+- Node.js v22 или выше
+- Docker и Docker Compose
+- PostgreSQL (опционально, если не используется Docker)
 
 ## Установка и запуск
 
-Make sure to install dependencies:
+### 1. Для запуска в Docker (рекомендуется)
 
 ```bash
-# npm
+# Клонировать репозиторий
+git clone https://github.com/yourusername/finance.git
+cd finance
+
+# Запустить приложение в Docker
+./scripts/docker-start.sh
+# или для Windows
+scripts\docker-start.bat
+
+# Приложение будет доступно по адресу http://localhost:3000
+```
+
+### 2. Для локальной разработки
+
+```bash
+# Клонировать репозиторий
+git clone https://github.com/yourusername/finance.git
+cd finance
+
+# Установить зависимости
 npm install
 
-# pnpm
-pnpm install
+# Запустить PostgreSQL в Docker для разработки и настроить Prisma
+./scripts/dev-setup.sh
+# или для Windows
+scripts\dev-setup.bat
 
-# yarn
-yarn install
-
-# bun
-bun install
+# Приложение будет доступно по адресу http://localhost:3000
 ```
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
-```
-
-## Production
-
-Build the application for production:
+## Сборка для продакшена
 
 ```bash
 # npm
 npm run build
 
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
+# Запуск собранного приложения
+npm run start
 ```
 
-Locally preview production build:
+## Архитектура базы данных
 
-```bash
-# npm
-npm run preview
+Приложение использует PostgreSQL и Prisma ORM для работы с данными. Основные модели:
 
-# pnpm
-pnpm preview
+- **Transaction**: Доходы и расходы
+- **RecurringItem**: Повторяющиеся платежи
+- **Debt**: Долги и кредиты
+- **Deposit**: Вклады и депозиты
 
-# yarn
-yarn preview
+## Переход с локального хранилища на базу данных
 
-# bun
-bun run preview
-```
+Это приложение изначально использовало localStorage для хранения данных. Теперь оно переведено на использование PostgreSQL с Prisma ORM, сохраняя тот же API и функциональность.
 
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+## Docker
+
+Приложение полностью контейнеризовано и состоит из двух основных сервисов:
+- **app** - само приложение на Nuxt.js
+- **postgres** - база данных PostgreSQL
+
+При первом запуске через Docker, демо-данные автоматически загружаются в базу данных.
+
+## Дополнительная информация
+
+Дополнительную информацию по фреймворку можно найти в [документации Nuxt 3](https://nuxt.com/docs/getting-started/introduction).

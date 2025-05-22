@@ -1,22 +1,32 @@
 {
   "name": "nuxt-app",
   "private": true,
-  "type": "module",
+  "type": "module",  
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "start": "node .output/server/index.mjs",
+    "docker:build": "docker build -t finance-app .",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "db:migrate:dev": "sh ./scripts/create-migration.sh",
+    "db:migrate:deploy": "npx prisma migrate deploy",
+    "db:init": "sh ./scripts/db-init.sh",
+    "prisma:generate": "npx prisma generate"
   },
   "dependencies": {
     "@pinia/nuxt": "^0.11.0",
+    "@prisma/client": "^6.8.2",
     "chart.js": "^3.9.1",
     "moment": "^2.30.1",
     "nuxt": "^3.17.3",
     "pinia": "^3.0.2",
     "primeicons": "^7.0.0",
     "primevue": "^3.53.1",
+    "prisma": "^6.8.2",
     "vue": "^3.5.14",
     "vue-chartjs": "^4.1.2",
     "vue-router": "^4.5.1"

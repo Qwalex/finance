@@ -7,12 +7,12 @@
         <div class="card-title">Транзакции</div>
         <Button label="Добавить транзакцию" icon="pi pi-plus" @click="openNewDialog" />
       </div>
-      
-      <DataTable :value="transactions" stripedRows :paginator="true" :rows="10"
+        <DataTable :value="transactions" stripedRows :paginator="true" :rows="10"
                  :rowsPerPageOptions="[5, 10, 25, 50]" sortField="date" :sortOrder="-1"
                  paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
                  currentPageReportTemplate="Показано {first} до {last} из {totalRecords} транзакций"
-                 :filters="filters" filterDisplay="menu" class="p-datatable-sm">
+                 :filters="filters" filterDisplay="menu" class="p-datatable-sm"
+                 :loading="loading" loadingIcon="pi pi-spinner">
         
         <Column field="date" header="Дата" sortable>
           <template #body="{ data }">
@@ -123,9 +123,12 @@ import moment from 'moment';
 const financeStore = useFinanceStore();
 const toast = useToast();
 
+// Состояние загрузки
+const loading = computed(() => financeStore.isLoading.transactions);
+
 // Загрузка данных
-onMounted(() => {
-  financeStore.loadData();
+onMounted(async () => {
+  await financeStore.fetchTransactions();
 });
 
 // Фильтры для таблицы
@@ -201,7 +204,7 @@ const editTransaction = (transaction) => {
   dialogVisible.value = true;
 };
 
-const saveTransaction = () => {
+const saveTransaction = async () => {
   if (!editingTransaction.category || !editingTransaction.amount) {
     toast.add({
       severity: 'error',
@@ -220,28 +223,47 @@ const saveTransaction = () => {
     description: editingTransaction.description
   };
   
-  if (dialogMode.value === 'add') {
-    financeStore.addTransaction(transactionData);
+  try {
+    let result;
+    
+    if (dialogMode.value === 'add') {
+      result = await financeStore.addTransaction(transactionData);
+      if (result.success) {
+        toast.add({
+          severity: 'success',
+          summary: 'Успешно',
+          detail: 'Транзакция добавлена',
+          life: 3000
+        });
+      } else {
+        throw new Error(result.error || 'Ошибка при добавлении транзакции');
+      }
+    } else {
+      result = await financeStore.updateTransaction({
+        id: editingId.value,
+        ...transactionData
+      });
+      if (result.success) {
+        toast.add({
+          severity: 'success',
+          summary: 'Успешно',
+          detail: 'Транзакция обновлена',
+          life: 3000
+        });
+      } else {
+        throw new Error(result.error || 'Ошибка при обновлении транзакции');
+      }
+    }
+    
+    closeDialog();
+  } catch (error) {
     toast.add({
-      severity: 'success',
-      summary: 'Успешно',
-      detail: 'Транзакция добавлена',
-      life: 3000
-    });
-  } else {
-    financeStore.updateTransaction({
-      id: editingId.value,
-      ...transactionData
-    });
-    toast.add({
-      severity: 'success',
-      summary: 'Успешно',
-      detail: 'Транзакция обновлена',
+      severity: 'error',
+      summary: 'Ошибка',
+      detail: error.message,
       life: 3000
     });
   }
-  
-  closeDialog();
 };
 
 const closeDialog = () => {
@@ -254,16 +276,30 @@ const confirmDelete = (transaction) => {
   deleteDialogVisible.value = true;
 };
 
-const deleteTransaction = () => {
-  financeStore.deleteTransaction(deletingId.value);
-  toast.add({
-    severity: 'success',
-    summary: 'Успешно',
-    detail: 'Транзакция удалена',
-    life: 3000
-  });
-  deleteDialogVisible.value = false;
-  deletingId.value = null;
+const deleteTransaction = async () => {
+  try {
+    const result = await financeStore.deleteTransaction(deletingId.value);
+    if (result.success) {
+      toast.add({
+        severity: 'success',
+        summary: 'Успешно',
+        detail: 'Транзакция удалена',
+        life: 3000
+      });
+    } else {
+      throw new Error(result.error || 'Ошибка при удалении транзакции');
+    }
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка',
+      detail: error.message,
+      life: 3000
+    });
+  } finally {
+    deleteDialogVisible.value = false;
+    deletingId.value = null;
+  }
 };
 </script>
 
