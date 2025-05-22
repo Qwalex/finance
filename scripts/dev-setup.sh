@@ -10,7 +10,7 @@ sleep 10
 
 # Обновляем .env файл для локальной разработки
 echo "Обновляем .env файл для локальной разработки..."
-sed -i 's/^DATABASE_URL=.*/DATABASE_URL="postgresql:\/\/postgres:postgres@localhost:5432\/finance_db?schema=public"/' .env
+sed -i 's/^DATABASE_URL=.*/DATABASE_URL="postgresql:\/\/postgres:postgres@localhost:5433\/finance_db?schema=public"/' .env
 
 # Создаем миграции Prisma
 echo "Создаем миграции Prisma..."

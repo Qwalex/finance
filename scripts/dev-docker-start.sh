@@ -9,7 +9,7 @@ echo "Запускаем контейнеры разработки..."
 docker-compose -f docker-compose.dev.yml up -d
 
 echo "Контейнеры разработки успешно запущены!"
-echo "PostgreSQL доступен на localhost:5432"
+echo "PostgreSQL доступен на localhost:5433"
 echo "Имя пользователя: postgres"
 echo "Пароль: postgres"
 echo "База данных: finance_db"
